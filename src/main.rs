@@ -6,6 +6,7 @@ extern crate "rust-md2" as md2;
 
 use md2::{S, S2, md2_compress};
 use std::collections::HashMap;
+use std::collections::hash_map::{Occupied, Vacant};
 use std::num::Int;
 
 pub fn main() {
@@ -35,7 +36,7 @@ pub fn main() {
       }
     }
 
-    let mut collisions: HashMap<u64,Vec<u64>> = HashMap::new();
+    let mut collisions: HashMap<String,Vec<u64>> = HashMap::new();
 
     // TODO random bytes
     for bytes in range(0u64, 256u64.pow(16 - rows)) {
@@ -57,21 +58,15 @@ pub fn main() {
             values[row + 1][0] = values[row][48] + (row as u8) - 1;
         }
 
-        let mut key = 0u64;
-        let mut shift = (16 - rows) * 8;
-        for row in range(rows + 2, 19) {
-            key |= (values[row][0] as u64) << shift;
-            shift -= 8;
-        }
+        // TODO use byte string?
+        let key = range(rows + 2, 19).fold(String::new(), |acc, row| {
+          format!("{}{:02x}", acc, values[row][0])
+        });
 
-        if !collisions.contains_key(&key) {
-            collisions.insert(key, vec!());
-        }
-
-        match collisions.get_mut(&key) {
-            Some(vec) => vec.push(bytes),
-            None => panic!("unreachable")
-        }
+        match collisions.entry(key) {
+            Vacant(entry) => { entry.set(vec!(bytes)); },
+            Occupied(mut entry) => { entry.get_mut().push(bytes); }
+        };
     }
 
     // Compute original messages for each collision.
