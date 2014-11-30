@@ -1,0 +1,12 @@
+[root]
+name = "rust-md2-collisions"
+version = "0.0.1"
+dependencies = [
+ "rust-md2 0.0.1 (git+https://github.com/ttaubert/rust-md2.git)",
+]
+
+[[package]]
+name = "rust-md2"
+version = "0.0.1"
+source = "git+https://github.com/ttaubert/rust-md2.git#f7cfed9848ad2ccbac65aa50acbf3fd7aafa2d89"
+

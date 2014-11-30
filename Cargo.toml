@@ -1,0 +1,9 @@
+[package]
+
+name = "rust-md2-collisions"
+version = "0.0.1"
+authors = ["Tim Taubert <tim@timtaubert.de>"]
+
+[dependencies.rust-md2]
+
+git = "https://github.com/ttaubert/rust-md2.git"
