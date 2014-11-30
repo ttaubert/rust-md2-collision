@@ -6,6 +6,7 @@ extern crate "rust-md2" as md2;
 
 use md2::{S, S2, md2_compress};
 use std::collections::HashMap;
+use std::num::Int;
 
 pub fn main() {
     let rows = 14;
@@ -34,17 +35,19 @@ pub fn main() {
       }
     }
 
-    let mut collisions: HashMap<(u8,u8,u8),Vec<u16>> = HashMap::new();
+    let mut collisions: HashMap<u64,Vec<u64>> = HashMap::new();
 
     // TODO random bytes
-    for bytes in range(0u32, 256 * 256) {
+    for bytes in range(0u64, 256u64.pow(16 - rows)) {
         // TODO set bytes
-        values[14][17] = (bytes >> 8) as u8;
-        values[14][18] = bytes as u8;
-        values[14][33] = (bytes >> 8) as u8;
-        values[14][34] = bytes as u8;
+        let mut shift = (16 - rows - 1) * 8;
+        for col in range(17, 17 + 16 - rows) {
+            values[rows][col] = (bytes >> shift) as u8;
+            values[rows][col + 16] = (bytes >> shift) as u8;
+            shift -= 8;
+        }
 
-        for row in range(rows + 1, rows + 4) {
+        for row in range(rows + 1, 18) {
             // Fill row.
             for i in range(1, 49) {
                 values[row][i] = S[values[row][i - 1] as uint] ^ values[row - 1][i];
@@ -54,14 +57,19 @@ pub fn main() {
             values[row + 1][0] = values[row][48] + (row as u8) - 1;
         }
 
-        let key = (values[16][0], values[17][0], values[18][0]);
+        let mut key = 0u64;
+        let mut shift = (16 - rows) * 8;
+        for row in range(rows + 2, 19) {
+            key |= (values[row][0] as u64) << shift;
+            shift -= 8;
+        }
 
         if !collisions.contains_key(&key) {
             collisions.insert(key, vec!());
         }
 
         match collisions.get_mut(&key) {
-            Some(vec) => vec.push(bytes as u16),
+            Some(vec) => vec.push(bytes),
             None => panic!("unreachable")
         }
     }
@@ -72,13 +80,15 @@ pub fn main() {
         count += 1;
         for bytes in collision.iter() {
             // TODO set bytes
-            values[14][17] = (*bytes >> 8) as u8;
-            values[14][18] = *bytes as u8;
-            values[14][33] = (*bytes >> 8) as u8;
-            values[14][34] = *bytes as u8;
+            let mut shift = (16 - rows - 1) * 8;
+            for col in range(17, 17 + 16 - rows) {
+                values[rows][col] = (*bytes >> shift) as u8;
+                values[rows][col + 16] = (*bytes >> shift) as u8;
+                shift -= 8;
+            }
 
             // Fill upper rectangles.
-            for row in range(0, 14) {
+            for row in range(0, rows) {
                 let row2 = rows - row;
                 for col in range(17, 32 - row2 + 2) {
                     values[row2 - 1][col] = S[values[row2][col - 1] as uint] ^ values[row2][col];
