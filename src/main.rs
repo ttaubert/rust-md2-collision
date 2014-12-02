@@ -9,8 +9,10 @@ use std::collections::HashMap;
 use std::collections::hash_map::{Occupied, Vacant};
 use std::num::Int;
 
-pub fn main() {
-    let rows = 14;
+type Collision = Vec<Vec<u8>>;
+type Collisions = Vec<Collision>;
+
+fn find_collisions(rows: uint) -> Collisions {
     let mut values = [[0u8, ..49], ..19];
 
     for row in range(1, rows + 1) {
@@ -67,10 +69,8 @@ pub fn main() {
     }
 
     // Compute original messages for each collision.
-    let mut count = 0u;
-    for collision in collisions.values().filter(|x| x.len() > 1) {
-        count += 1;
-        for bytes in collision.iter() {
+    collisions.values().filter(|x| x.len() > 1).map(|collision| {
+        collision.iter().map(|bytes| {
             // TODO set bytes
             let mut shift = (16 - rows - 1) * 8;
             for col in range(17, 17 + 16 - rows) {
@@ -87,14 +87,39 @@ pub fn main() {
                 }
             }
 
-            let empty = [0u8, ..16];
-            let msg = values[0].slice(17, 33).iter().fold(String::new(), |a, &b| format!("{}{:02x}", a, b));
-            let hash = md2_compress(&empty, values[0].slice(17, 33)).iter().fold(String::new(), |a, &b| format!("{}{:02x}", a, b));
-            println!("msg = {}, hash = {}", msg, hash);
-        }
+            values[0].slice(17, 33).to_vec()
+        }).collect()
+    }).collect()
+}
 
-        println!("");
+fn check_collisions(collisions: &Collisions) -> bool {
+    let empty = [0u8, ..16];
+
+    for collision in collisions.iter() {
+        let mut first_hash: Option<[u8, ..16]> = None;
+
+        for msg in collision.iter() {
+            let md2 = md2_compress(&empty, msg.as_slice());
+
+            match first_hash {
+                Some(hash) => {
+                    if hash != md2 {
+                        return false;
+                    }
+                }
+                None => first_hash = Some(md2)
+            };
+        }
     }
 
-    println!("Found {} collisions.", count);
+    true
+}
+
+fn main() {
+    let collisions = find_collisions(14);
+    if !check_collisions(&collisions) {
+        panic!("invalid collision found :(");
+    }
+
+    println!("Found {} collisions.", collisions.iter().count());
 }
