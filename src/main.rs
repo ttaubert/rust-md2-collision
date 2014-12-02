@@ -36,7 +36,7 @@ pub fn main() {
       }
     }
 
-    let mut collisions: HashMap<String,Vec<u64>> = HashMap::new();
+    let mut collisions: HashMap<Vec<u8>,Vec<u64>> = HashMap::new();
 
     // TODO random bytes
     for bytes in range(0u64, 256u64.pow(16 - rows)) {
@@ -58,10 +58,7 @@ pub fn main() {
             values[row + 1][0] = values[row][48] + (row as u8) - 1;
         }
 
-        // TODO use byte string?
-        let key = range(rows + 2, 19).fold(String::new(), |acc, row| {
-          format!("{}{:02x}", acc, values[row][0])
-        });
+        let key = Vec::from_fn(17 - rows, |row| values[rows + 2 + row][0]);
 
         match collisions.entry(key) {
             Vacant(entry) => { entry.set(vec!(bytes)); },
