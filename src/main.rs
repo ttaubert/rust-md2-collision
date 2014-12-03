@@ -13,31 +13,7 @@ type Collision = Vec<Vec<u8>>;
 type Collisions = Vec<Collision>;
 
 fn find_collisions(rows: uint) -> Collisions {
-    let mut values = [[0u8, ..49], ..19];
-
-    for row in range(1, rows + 1) {
-      // Fill row of T1.
-      for i in range(1, 17) {
-          values[row][i] = S[values[row][i - 1] as uint] ^ values[row - 1][i];
-      }
-
-      // Last bytes are equal.
-      values[row][32] = values[row][16];
-      values[row][48] = values[row][16];
-
-      // Next t value.
-      values[row + 1][0] = values[row][48] + (row as u8) - 1;
-    }
-
-    // Compute triangles.
-    for col in range(0, rows) {
-      for row in range(0, rows - col - 1) {
-        let row2 = rows - row;
-        values[row2][32 - col - 1] = S2[(values[row2][32 - col] ^ values[row2 - 1][32 - col]) as uint];
-        values[row2][48 - col - 1] = S2[(values[row2][48 - col] ^ values[row2 - 1][48 - col]) as uint];
-      }
-    }
-
+    let mut values = create_initial_state(rows);
     let mut bytes = Vec::from_elem(16 - rows, 0u8);
     let mut collisions: HashMap<Vec<u8>,Collision> = HashMap::new();
 
@@ -84,6 +60,35 @@ fn find_collisions(rows: uint) -> Collisions {
             values[0].slice(17, 33).to_vec()
         }).collect()
     }).collect()
+}
+
+fn create_initial_state(rows: uint) -> [[u8, ..49], ..19] {
+    let mut values = [[0u8, ..49], ..19];
+
+    for row in range(1, rows + 1) {
+      // Fill row of T1.
+      for i in range(1, 17) {
+          values[row][i] = S[values[row][i - 1] as uint] ^ values[row - 1][i];
+      }
+
+      // Last bytes are equal.
+      values[row][32] = values[row][16];
+      values[row][48] = values[row][16];
+
+      // Next t value.
+      values[row + 1][0] = values[row][48] + (row as u8) - 1;
+    }
+
+    // Compute triangles.
+    for col in range(0, rows) {
+      for row in range(0, rows - col - 1) {
+        let row2 = rows - row;
+        values[row2][32 - col - 1] = S2[(values[row2][32 - col] ^ values[row2 - 1][32 - col]) as uint];
+        values[row2][48 - col - 1] = S2[(values[row2][48 - col] ^ values[row2 - 1][48 - col]) as uint];
+      }
+    }
+
+    values
 }
 
 fn increase(num: &mut [u8]) -> bool {
