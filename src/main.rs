@@ -12,14 +12,16 @@ use std::slice::bytes::copy_memory;
 type Collision = Vec<Vec<u8>>;
 type Collisions = Vec<Collision>;
 
-fn find_collisions(rows: uint) -> Collisions {
-    let mut values = create_initial_state(rows);
-    let mut bytes = Vec::from_elem(16 - rows, 0u8);
+fn find_collisions(k: uint) -> Collisions {
+    let mut values = create_initial_state(k);
+    let mut bytes = Vec::from_elem(k, 0u8);
     let mut collisions: HashMap<Vec<u8>,Collision> = HashMap::new();
 
+    let rows = 16 - k;
+
     loop {
-        copy_memory(values[rows].slice_mut(17, 17 + 16 - rows), bytes.as_slice());
-        copy_memory(values[rows].slice_mut(17 + 16, 17 + 16 - rows + 16), bytes.as_slice());
+        copy_memory(values[rows].slice_mut(17, 17 + k), bytes.as_slice());
+        copy_memory(values[rows].slice_mut(17 + 16, 17 + k + 16), bytes.as_slice());
 
         for row in range(rows + 1, 18) {
             // Fill row.
@@ -46,8 +48,8 @@ fn find_collisions(rows: uint) -> Collisions {
     // Compute original messages for each collision.
     collisions.values().filter(|x| x.len() > 1).map(|collision| {
         collision.iter().map(|bytes| {
-            copy_memory(values[rows].slice_mut(17, 17 + 16 - rows), bytes.as_slice());
-            copy_memory(values[rows].slice_mut(17 + 16, 17 + 16 - rows + 16), bytes.as_slice());
+            copy_memory(values[rows].slice_mut(17, 17 + k), bytes.as_slice());
+            copy_memory(values[rows].slice_mut(17 + 16, 17 + k + 16), bytes.as_slice());
 
             // Fill upper rectangles.
             for row in range(1, rows + 1).rev() {
@@ -61,7 +63,8 @@ fn find_collisions(rows: uint) -> Collisions {
     }).collect()
 }
 
-fn create_initial_state(rows: uint) -> [[u8, ..49], ..19] {
+fn create_initial_state(k: uint) -> [[u8, ..49], ..19] {
+    let rows = 16 - k;
     let mut values = [[0u8, ..49], ..19];
 
     for row in range(1, rows + 1) {
@@ -133,7 +136,7 @@ fn check_collisions(collisions: &Collisions) -> bool {
 }
 
 fn main() {
-    let collisions = find_collisions(14);
+    let collisions = find_collisions(2);
     if !check_collisions(&collisions) {
         panic!("invalid collision found :(");
     }
