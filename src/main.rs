@@ -7,7 +7,7 @@ extern crate "rust-md2" as md2;
 use md2::{S, S2, md2_compress};
 use std::collections::HashMap;
 use std::collections::hash_map::{Occupied, Vacant};
-use std::num::Int;
+use std::slice::bytes::copy_memory;
 
 type Collision = Vec<Vec<u8>>;
 type Collisions = Vec<Collision>;
@@ -38,17 +38,12 @@ fn find_collisions(rows: uint) -> Collisions {
       }
     }
 
-    let mut collisions: HashMap<Vec<u8>,Vec<u64>> = HashMap::new();
+    let mut bytes = Vec::from_elem(16 - rows, 0u8);
+    let mut collisions: HashMap<Vec<u8>,Collision> = HashMap::new();
 
-    // TODO random bytes
-    for bytes in range(0u64, 256u64.pow(16 - rows)) {
-        // TODO set bytes
-        let mut shift = (16 - rows - 1) * 8;
-        for col in range(17, 17 + 16 - rows) {
-            values[rows][col] = (bytes >> shift) as u8;
-            values[rows][col + 16] = (bytes >> shift) as u8;
-            shift -= 8;
-        }
+    loop {
+        copy_memory(values[rows].slice_mut(17, 17 + 16 - rows), bytes.as_slice());
+        copy_memory(values[rows].slice_mut(17 + 16, 17 + 16 - rows + 16), bytes.as_slice());
 
         for row in range(rows + 1, 18) {
             // Fill row.
@@ -63,21 +58,20 @@ fn find_collisions(rows: uint) -> Collisions {
         let key = Vec::from_fn(17 - rows, |row| values[rows + 2 + row][0]);
 
         match collisions.entry(key) {
-            Vacant(entry) => { entry.set(vec!(bytes)); },
-            Occupied(mut entry) => { entry.get_mut().push(bytes); }
+            Vacant(entry) => { entry.set(vec!(bytes.clone())); },
+            Occupied(mut entry) => { entry.get_mut().push(bytes.clone()); }
         };
+
+        if !increase(bytes.as_mut_slice()) {
+            break;
+        }
     }
 
     // Compute original messages for each collision.
     collisions.values().filter(|x| x.len() > 1).map(|collision| {
         collision.iter().map(|bytes| {
-            // TODO set bytes
-            let mut shift = (16 - rows - 1) * 8;
-            for col in range(17, 17 + 16 - rows) {
-                values[rows][col] = (*bytes >> shift) as u8;
-                values[rows][col + 16] = (*bytes >> shift) as u8;
-                shift -= 8;
-            }
+            copy_memory(values[rows].slice_mut(17, 17 + 16 - rows), bytes.as_slice());
+            copy_memory(values[rows].slice_mut(17 + 16, 17 + 16 - rows + 16), bytes.as_slice());
 
             // Fill upper rectangles.
             for row in range(0, rows) {
@@ -90,6 +84,28 @@ fn find_collisions(rows: uint) -> Collisions {
             values[0].slice(17, 33).to_vec()
         }).collect()
     }).collect()
+}
+
+fn increase(num: &mut [u8]) -> bool {
+    let len = num.len();
+
+    for i in range(0, len) {
+        let i = len - 1 - i;
+
+        if num[i] == 255 {
+            continue;
+        }
+
+        num[i] += 1;
+
+        for i in range(i + 1, len) {
+            num[i] = 0;
+        }
+
+        return true;
+    }
+
+    false
 }
 
 fn check_collisions(collisions: &Collisions) -> bool {
