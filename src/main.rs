@@ -12,28 +12,28 @@ use std::slice::bytes::copy_memory;
 type Collision = Vec<Vec<u8>>;
 type Collisions = Vec<Collision>;
 
-fn find_collisions(k: uint) -> Collisions {
-    let mut values = create_initial_state(k);
+fn find_collisions(state: [[u8, ..49], ..19], k: uint) -> Collisions {
+    let mut state = state;
     let mut bytes = Vec::from_elem(k, 0u8);
     let mut collisions: HashMap<Vec<u8>,Collision> = HashMap::new();
 
     let rows = 16 - k;
 
     loop {
-        copy_memory(values[rows].slice_mut(17, 17 + k), bytes.as_slice());
-        copy_memory(values[rows].slice_mut(17 + 16, 17 + k + 16), bytes.as_slice());
+        copy_memory(state[rows].slice_mut(17, 17 + k), bytes.as_slice());
+        copy_memory(state[rows].slice_mut(17 + 16, 17 + k + 16), bytes.as_slice());
 
         for row in range(rows + 1, 18) {
             // Fill row.
             for i in range(1, 49) {
-                values[row][i] = S[values[row][i - 1] as uint] ^ values[row - 1][i];
+                state[row][i] = S[state[row][i - 1] as uint] ^ state[row - 1][i];
             }
 
             // Next t value.
-            values[row + 1][0] = values[row][48] + (row as u8) - 1;
+            state[row + 1][0] = state[row][48] + (row as u8) - 1;
         }
 
-        let key = Vec::from_fn(17 - rows, |row| values[rows + 2 + row][0]);
+        let key = Vec::from_fn(17 - rows, |row| state[rows + 2 + row][0]);
 
         match collisions.entry(key) {
             Vacant(entry) => { entry.set(vec!(bytes.clone())); },
@@ -48,17 +48,17 @@ fn find_collisions(k: uint) -> Collisions {
     // Compute original messages for each collision.
     collisions.values().filter(|x| x.len() > 1).map(|collision| {
         collision.iter().map(|bytes| {
-            copy_memory(values[rows].slice_mut(17, 17 + k), bytes.as_slice());
-            copy_memory(values[rows].slice_mut(17 + 16, 17 + k + 16), bytes.as_slice());
+            copy_memory(state[rows].slice_mut(17, 17 + k), bytes.as_slice());
+            copy_memory(state[rows].slice_mut(17 + 16, 17 + k + 16), bytes.as_slice());
 
             // Fill upper rectangles.
             for row in range(1, rows + 1).rev() {
                 for col in range(17, 32 - row + 2) {
-                    values[row - 1][col] = S[values[row][col - 1] as uint] ^ values[row][col];
+                    state[row - 1][col] = S[state[row][col - 1] as uint] ^ state[row][col];
                 }
             }
 
-            values[0].slice(17, 33).to_vec()
+            state[0].slice(17, 33).to_vec()
         }).collect()
     }).collect()
 }
@@ -140,7 +140,9 @@ fn check_collisions(collisions: &Collisions) -> bool {
 }
 
 fn main() {
-    let collisions = find_collisions(2);
+    let k = 2;
+    let state = create_initial_state(k);
+    let collisions = find_collisions(state.clone(), k);
     if !check_collisions(&collisions) {
         panic!("invalid collision found :(");
     }
