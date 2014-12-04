@@ -116,34 +116,28 @@ fn increase(num: &mut [u8]) -> bool {
     false
 }
 
-fn check_collisions(collisions: &Collisions) -> bool {
+fn check_collision(collision: &Collision) -> bool {
     let empty = [0u8, ..16];
+    let mut first_hash: Option<[u8, ..16]> = None;
+    let mut hashes = collision.iter().map(|msg| {
+        md2_compress(&empty, msg.as_slice())
+    });
 
-    for collision in collisions.iter() {
-        let mut first_hash: Option<[u8, ..16]> = None;
-
-        for msg in collision.iter() {
-            let md2 = md2_compress(&empty, msg.as_slice());
-
-            match first_hash {
-                Some(hash) => {
-                    if hash != md2 {
-                        return false;
-                    }
-                }
-                None => first_hash = Some(md2)
-            };
-        }
-    }
-
-    true
+    hashes.all(|md2| {
+        first_hash.map_or_else(|| {
+            first_hash = Some(md2);
+            true
+        }, |v| v == md2)
+    })
 }
 
 fn main() {
     let k = 2;
     let state = create_initial_state(k);
-    let collisions = find_collisions(state.clone(), k);
-    if !check_collisions(&collisions) {
+    let collisions = find_collisions(state, k);
+
+    // Check that the colliding messages we found generate the same hashes.
+    if !collisions.iter().all(check_collision) {
         panic!("invalid collision found :(");
     }
 
