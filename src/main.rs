@@ -93,27 +93,22 @@ fn create_initial_state(k: uint) -> [[u8, ..49], ..19] {
 }
 
 fn increase(num: &mut [u8]) -> bool {
-    let len = num.len();
-
     // Iterate bytes starting from the end.
-    for i in range(0, len).rev() {
+    range(0, num.len()).rev().any(|i| {
         if num[i] == 255 {
-            continue;
+            return false;
         }
 
         // Increase.
         num[i] += 1;
 
         // Set all bytes right of the current index to zero.
-        for i in range(i + 1, len) {
+        for i in range(i + 1, num.len()) {
             num[i] = 0;
         }
 
-        return true;
-    }
-
-    // Increasing any further would overflow.
-    false
+        true
+    })
 }
 
 fn check_collision(collision: &Collision) -> bool {
