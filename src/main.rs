@@ -2,6 +2,8 @@
 * License, v. 2.0. If a copy of the MPL was not distributed with this file,
 * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#![feature(slicing_syntax)]
+
 extern crate "rust-md2" as md2;
 
 use md2::{SBOX, SBOXI, md2_compress};
@@ -33,7 +35,7 @@ impl Iterator<Vec<u8>> for ByteRange {
       self.v[i] += 1;
 
       // Zero all bytes right of the current index.
-      self.v.slice_from_mut(i + 1).set_memory(0);
+      self.v[mut i+1..].set_memory(0);
 
       return Some(self.v.clone());
     }
@@ -48,8 +50,8 @@ fn find_collisions(state: [[u8, ..49], ..19], k: uint) -> Collisions {
   let mut collisions: HashMap<Vec<u8>,Collision> = HashMap::new();
 
   for bytes in ByteRange::new(k) {
-    copy_memory(state[rows].slice_mut(17, 17 + k), bytes.as_slice());
-    copy_memory(state[rows].slice_mut(17 + 16, 17 + k + 16), bytes.as_slice());
+    copy_memory(state[rows][mut 17..17+k], bytes[]);
+    copy_memory(state[rows][mut 17+16..17+k+16], bytes[]);
 
     for row in range(rows + 1, 18) {
       // Fill row.
@@ -72,8 +74,8 @@ fn find_collisions(state: [[u8, ..49], ..19], k: uint) -> Collisions {
   // Compute original messages for each collision.
   collisions.values().filter(|x| x.len() > 1).map(|collision| {
     collision.iter().map(|bytes| {
-      copy_memory(state[rows].slice_mut(17, 17 + k), bytes.as_slice());
-      copy_memory(state[rows].slice_mut(17 + 16, 17 + k + 16), bytes.as_slice());
+      copy_memory(state[rows][mut 17..17+k], bytes[]);
+      copy_memory(state[rows][mut 17+16..17+k+16], bytes[]);
 
       // Fill upper rectangles.
       for row in range(1, rows + 1).rev() {
@@ -82,7 +84,7 @@ fn find_collisions(state: [[u8, ..49], ..19], k: uint) -> Collisions {
         }
       }
 
-      state[0].slice(17, 33).to_vec()
+      state[0][17..33].to_vec()
     }).collect()
   }).collect()
 }
@@ -119,9 +121,7 @@ fn create_initial_state(k: uint) -> [[u8, ..49], ..19] {
 fn check_collision(collision: &Collision) -> bool {
   let empty = [0u8, ..16];
   let mut first_hash: Option<[u8, ..16]> = None;
-  let mut hashes = collision.iter().map(|msg| {
-    md2_compress(&empty, msg.as_slice())
-  });
+  let mut hashes = collision.iter().map(|msg| md2_compress(&empty, msg[]));
 
   hashes.all(|md2| {
     first_hash.map_or_else(|| { first_hash = Some(md2); true }, |v| v == md2)
