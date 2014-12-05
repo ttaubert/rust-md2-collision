@@ -7,19 +7,47 @@ extern crate "rust-md2" as md2;
 use md2::{S, S2, md2_compress};
 use std::collections::HashMap;
 use std::collections::hash_map::{Occupied, Vacant};
-use std::slice::bytes::copy_memory;
+use std::slice::bytes::{copy_memory, MutableByteVector};
 
 type Collision = Vec<Vec<u8>>;
 type Collisions = Vec<Collision>;
 
+struct ByteRange {
+    v: Vec<u8>
+}
+
+impl ByteRange {
+    fn new(n: uint) -> ByteRange {
+        ByteRange { v: Vec::from_elem(n, 0u8) }
+    }
+}
+
+impl Iterator<Vec<u8>> for ByteRange {
+    fn next(&mut self) -> Option<Vec<u8>> {
+        for i in range(0, self.v.len()).rev() {
+            if self.v[i] == 255 {
+                continue;
+            }
+
+            // Increase.
+            self.v[i] += 1;
+
+            // Zero all bytes right of the current index.
+            self.v.slice_from_mut(i + 1).set_memory(0);
+
+            return Some(self.v.clone());
+        }
+
+        None
+    }
+}
+
 fn find_collisions(state: [[u8, ..49], ..19], k: uint) -> Collisions {
+    let rows = 16 - k;
     let mut state = state;
-    let mut bytes = Vec::from_elem(k, 0u8);
     let mut collisions: HashMap<Vec<u8>,Collision> = HashMap::new();
 
-    let rows = 16 - k;
-
-    loop {
+    for bytes in ByteRange::new(k) {
         copy_memory(state[rows].slice_mut(17, 17 + k), bytes.as_slice());
         copy_memory(state[rows].slice_mut(17 + 16, 17 + k + 16), bytes.as_slice());
 
@@ -36,13 +64,9 @@ fn find_collisions(state: [[u8, ..49], ..19], k: uint) -> Collisions {
         let key = Vec::from_fn(17 - rows, |row| state[rows + 2 + row][0]);
 
         match collisions.entry(key) {
-            Vacant(entry) => { entry.set(vec!(bytes.clone())); },
-            Occupied(mut entry) => { entry.get_mut().push(bytes.clone()); }
+            Vacant(entry) => { entry.set(vec!(bytes)); },
+            Occupied(mut entry) => { entry.get_mut().push(bytes); }
         };
-
-        if !increase(bytes.as_mut_slice()) {
-            break;
-        }
     }
 
     // Compute original messages for each collision.
@@ -90,25 +114,6 @@ fn create_initial_state(k: uint) -> [[u8, ..49], ..19] {
     }
 
     state
-}
-
-fn increase(num: &mut [u8]) -> bool {
-    // Iterate bytes starting from the end.
-    range(0, num.len()).rev().any(|i| {
-        if num[i] == 255 {
-            return false;
-        }
-
-        // Increase.
-        num[i] += 1;
-
-        // Set all bytes right of the current index to zero.
-        for i in range(i + 1, num.len()) {
-            num[i] = 0;
-        }
-
-        true
-    })
 }
 
 fn check_collision(collision: &Collision) -> bool {
