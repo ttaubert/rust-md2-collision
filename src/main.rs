@@ -4,7 +4,7 @@
 
 extern crate "rust-md2" as md2;
 
-use md2::{S, S2, md2_compress};
+use md2::{SBOX, SBOXI, md2_compress};
 use std::collections::HashMap;
 use std::collections::hash_map::{Occupied, Vacant};
 use std::slice::bytes::{copy_memory, MutableByteVector};
@@ -54,7 +54,7 @@ fn find_collisions(state: [[u8, ..49], ..19], k: uint) -> Collisions {
     for row in range(rows + 1, 18) {
       // Fill row.
       for i in range(1, 49) {
-        state[row][i] = S[state[row][i - 1] as uint] ^ state[row - 1][i];
+        state[row][i] = SBOX[state[row][i - 1] as uint] ^ state[row - 1][i];
       }
 
       // Next t value.
@@ -78,7 +78,7 @@ fn find_collisions(state: [[u8, ..49], ..19], k: uint) -> Collisions {
       // Fill upper rectangles.
       for row in range(1, rows + 1).rev() {
         for col in range(17, 32 - row + 2) {
-          state[row - 1][col] = S[state[row][col - 1] as uint] ^ state[row][col];
+          state[row - 1][col] = SBOX[state[row][col - 1] as uint] ^ state[row][col];
         }
       }
 
@@ -94,7 +94,7 @@ fn create_initial_state(k: uint) -> [[u8, ..49], ..19] {
   for row in range(1, rows + 1) {
     // Fill row of T1.
     for i in range(1, 17) {
-      state[row][i] = S[state[row][i - 1] as uint] ^ state[row - 1][i];
+      state[row][i] = SBOX[state[row][i - 1] as uint] ^ state[row - 1][i];
     }
 
     // Last bytes are equal.
@@ -108,8 +108,8 @@ fn create_initial_state(k: uint) -> [[u8, ..49], ..19] {
   // Compute triangles.
   for col in range(0, rows) {
     for row in range(2 + col, rows + 1).rev() {
-      state[row][32 - col - 1] = S2[(state[row][32 - col] ^ state[row - 1][32 - col]) as uint];
-      state[row][48 - col - 1] = S2[(state[row][48 - col] ^ state[row - 1][48 - col]) as uint];
+      state[row][32 - col - 1] = SBOXI[(state[row][32 - col] ^ state[row - 1][32 - col]) as uint];
+      state[row][48 - col - 1] = SBOXI[(state[row][48 - col] ^ state[row - 1][48 - col]) as uint];
     }
   }
 
