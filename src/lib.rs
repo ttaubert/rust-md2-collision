@@ -6,13 +6,13 @@
 
 extern crate "rust-md2" as md2;
 
-use md2::{SBOX, SBOXI, compress};
+use md2::{SBOX, SBOXI};
 use std::collections::HashMap;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::slice::bytes::{copy_memory, MutableByteVector};
 
-type Collision = Vec<Vec<u8>>;
-type Collisions = Vec<Collision>;
+pub type Collision = Vec<Vec<u8>>;
+pub type Collisions = Vec<Collision>;
 
 struct ByteRange {
   v: Vec<u8>
@@ -118,25 +118,30 @@ fn create_initial_state(k: uint) -> [[u8, ..49], ..19] {
   state
 }
 
-fn check_collision(collision: &Collision) -> bool {
-  let empty = [0u8, ..16];
-  let mut first_hash: Option<[u8, ..16]> = None;
-  let hashes = collision.iter().map(|msg| compress(&empty, msg[]));
-
-  hashes.all(|md2| {
-    first_hash.map_or_else(|| { first_hash = Some(md2); true }, |v| v == md2)
-  })
+pub fn find(k: uint) -> Collisions {
+  find_collisions(create_initial_state(k), k)
 }
 
-fn main() {
-  let k = 2;
-  let state = create_initial_state(k);
-  let collisions = find_collisions(state, k);
+#[cfg(test)]
+mod test {
+  use find;
+  use Collision;
+  use md2::compress;
 
-  // Check that the colliding messages we found generate the same hashes.
-  if !collisions.iter().all(check_collision) {
-    panic!("invalid collision found :(");
+  fn check_collision(collision: &Collision) -> bool {
+    let empty = [0u8, ..16];
+    let mut first_hash: Option<[u8, ..16]> = None;
+    let hashes = collision.iter().map(|msg| compress(&empty, msg[]));
+
+    hashes.all(|md2| {
+      first_hash.map_or_else(|| { first_hash = Some(md2); true }, |v| v == md2)
+    })
   }
 
-  println!("Found {} collisions.", collisions.iter().count());
+  #[test]
+  fn test() {
+    let collisions = find(2);
+    assert!(collisions.iter().all(check_collision));
+    assert_eq!(collisions.iter().count(), 141);
+  }
 }
