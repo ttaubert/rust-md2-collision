@@ -12,8 +12,8 @@ use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::iter::range_inclusive;
 use std::slice::bytes::{copy_memory, MutableByteVector};
 
-pub type Collision = Vec<Vec<u8>>;
-pub type Collisions = Vec<Collision>;
+type Collision = Vec<Vec<u8>>;
+type Collisions = Vec<Collision>;
 
 struct ByteRange {
   v: Vec<u8>
@@ -119,7 +119,7 @@ fn create_initial_state(k: uint) -> [[u8, ..49], ..19] {
   state
 }
 
-pub fn find(k: uint) -> Collisions {
+pub fn find(k: uint) -> Vec<Vec<Vec<u8>>> {
   find_collisions(create_initial_state(k), k)
 }
 
