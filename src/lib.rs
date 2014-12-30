@@ -140,9 +140,16 @@ mod test {
   }
 
   #[test]
-  fn test() {
+  fn test_k2() {
     let collisions = find(2);
     assert!(collisions.iter().all(check_collision));
     assert_eq!(collisions.iter().count(), 141);
+  }
+
+  #[test]
+  fn test_k3() {
+    let collisions = find(3);
+    assert!(collisions.iter().all(check_collision));
+    assert_eq!(collisions.iter().count(), 32784);
   }
 }
