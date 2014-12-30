@@ -9,6 +9,7 @@ extern crate "rust-md2" as md2;
 use md2::{SBOX, SBOXI};
 use std::collections::HashMap;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
+use std::iter::range_inclusive;
 use std::slice::bytes::{copy_memory, MutableByteVector};
 
 pub type Collision = Vec<Vec<u8>>;
@@ -78,7 +79,7 @@ fn find_collisions(state: [[u8, ..49], ..19], k: uint) -> Collisions {
       copy_memory(state[rows][mut 17+16..17+k+16], bytes[]);
 
       // Fill upper rectangles.
-      for row in range(1, rows + 1).rev() {
+      for row in range_inclusive(1, rows).rev() {
         for col in range(17, 32 - row + 2) {
           state[row - 1][col] = SBOX[state[row][col - 1] as uint] ^ state[row][col];
         }
@@ -93,7 +94,7 @@ fn create_initial_state(k: uint) -> [[u8, ..49], ..19] {
   let rows = 16 - k;
   let mut state = [[0u8, ..49], ..19];
 
-  for row in range(1, rows + 1) {
+  for row in range_inclusive(1, rows) {
     // Fill row of T1.
     for i in range(1, 17) {
       state[row][i] = SBOX[state[row][i - 1] as uint] ^ state[row - 1][i];
@@ -109,7 +110,7 @@ fn create_initial_state(k: uint) -> [[u8, ..49], ..19] {
 
   // Compute triangles.
   for col in range(0, rows) {
-    for row in range(2 + col, rows + 1).rev() {
+    for row in range_inclusive(2 + col, rows).rev() {
       state[row][32 - col - 1] = SBOXI[(state[row][32 - col] ^ state[row - 1][32 - col]) as uint];
       state[row][48 - col - 1] = SBOXI[(state[row][48 - col] ^ state[row - 1][48 - col]) as uint];
     }
