@@ -6,9 +6,9 @@
 
 extern crate "rust-md2" as md2;
 
-use md2::{SBOX, SBOXI, md2_compress};
+use md2::{SBOX, SBOXI, compress};
 use std::collections::HashMap;
-use std::collections::hash_map::{Occupied, Vacant};
+use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::slice::bytes::{copy_memory, MutableByteVector};
 
 type Collision = Vec<Vec<u8>>;
@@ -121,7 +121,7 @@ fn create_initial_state(k: uint) -> [[u8, ..49], ..19] {
 fn check_collision(collision: &Collision) -> bool {
   let empty = [0u8, ..16];
   let mut first_hash: Option<[u8, ..16]> = None;
-  let mut hashes = collision.iter().map(|msg| md2_compress(&empty, msg[]));
+  let hashes = collision.iter().map(|msg| compress(&empty, msg[]));
 
   hashes.all(|md2| {
     first_hash.map_or_else(|| { first_hash = Some(md2); true }, |v| v == md2)

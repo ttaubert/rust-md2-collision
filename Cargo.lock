@@ -8,5 +8,5 @@ dependencies = [
 [[package]]
 name = "rust-md2"
 version = "0.0.1"
-source = "git+https://github.com/ttaubert/rust-md2.git#6fd3ad36cb8ef409955e6d5dc6fa9b84b8d56d1f"
+source = "git+https://github.com/ttaubert/rust-md2.git#1e89d417039f9eac85476614108c1f8eb8c0164a"
 
