@@ -126,10 +126,9 @@ pub fn find(k: uint) -> Vec<Vec<Vec<u8>>> {
 #[cfg(test)]
 mod test {
   use find;
-  use Collision;
   use md2::compress;
 
-  fn check_collision(collision: &Collision) -> bool {
+  fn check_collision(collision: &Vec<Vec<u8>>) -> bool {
     let empty = [0u8, ..16];
     let mut first_hash: Option<[u8, ..16]> = None;
     let hashes = collision.iter().map(|msg| compress(&empty, msg[]));
@@ -139,17 +138,16 @@ mod test {
     })
   }
 
-  #[test]
-  fn test_k2() {
-    let collisions = find(2);
+  fn check_collisions(k: uint, num: uint, num_total: uint) {
+    let collisions = find(k);
     assert!(collisions.iter().all(check_collision));
-    assert_eq!(collisions.iter().count(), 141);
+    assert_eq!(collisions.iter().count(), num);
+    assert_eq!(collisions.iter().fold(0u, |acc, coll| acc + coll.len() - 1), num_total);
   }
 
   #[test]
-  fn test_k3() {
-    let collisions = find(3);
-    assert!(collisions.iter().all(check_collision));
-    assert_eq!(collisions.iter().count(), 32784);
+  fn test() {
+    check_collisions(2, 141, 141);
+    check_collisions(3, 32744, 32784);
   }
 }
