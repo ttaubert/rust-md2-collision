@@ -67,27 +67,22 @@ impl Iterator<(Vec<u8>, Vec<u8>)> for Candidates {
     copy_memory(self.state[mut 16..18], bytes[]);
     copy_memory(self.state[mut 32..34], bytes[]);
 
-    // TODO rename variables
-
     // Compute the final compression value.
-    let key = compress(self.state[], self.row);
+    let cmp = compress(self.state[], self.row);
 
     // Compute the original message leading to this state.
     let msg = decompress(self.state[], self.row);
 
-    Some((key, msg))
+    Some((cmp, msg))
   }
 }
 
 pub fn candidates(state: &[u8], row: uint) -> Candidates {
   // Test 2^16 combinations.
-  let range = ByteRange::new(2);
-
-  Candidates { range: range, state: state.to_vec(), row: row }
+  Candidates { range: ByteRange::new(2), state: state.to_vec(), row: row }
 }
 
-// TODO rename function
-pub fn create_initial_state(num_rows: uint) -> Vec<u8> {
+pub fn prefill_row(num_rows: uint) -> Vec<u8> {
   let mut state = [[0u8, ..49], ..19];
 
   for row in range_inclusive(1, num_rows) {
@@ -153,12 +148,34 @@ fn decompress(state: &[u8], iteration: uint) -> Vec<u8> {
 #[cfg(test)]
 mod test {
   use candidates;
-  use create_initial_state;
+  use prefill_row;
 
   use md2::compress;
   use std::collections::HashMap;
   use std::collections::hash_map::Entry::{Occupied, Vacant};
   use std::sync::TaskPool;
+
+  // Insert the given candidate pair, consisting of the compressed and the
+  // original message, into the given hash map.
+  fn insert(map: &mut HashMap<Vec<u8>,Vec<Vec<u8>>>, cmp: Vec<u8>, msg: Vec<u8>) {
+    match map.entry(cmp) {
+      Vacant(entry) => { entry.set(vec!(msg)); }
+      Occupied(mut entry) => { entry.get_mut().push(msg); }
+    }
+  }
+
+  // Validate all colliding entries in the given map to ensure that those
+  // messages do indeed collide when computing their compressed values.
+  fn validate(map: &HashMap<Vec<u8>,Vec<Vec<u8>>>) -> bool {
+    let empty = [0u8, ..16];
+
+    // Ignore compressed values with only a single message (no collisions).
+    let collisions = map.iter().filter(|&(_, msgs)| msgs.len() > 1);
+
+    collisions.all(|(cmp, msgs)| {
+      msgs.iter().all(|msg| compress(&empty, msg[]) == *cmp)
+    })
+  }
 
   // Count the number of map entries that have more than a single message.
   // Those will compress to the same final value and thus represent collisions.
@@ -166,34 +183,16 @@ mod test {
     map.values().fold(0u, |count, msgs| count + msgs.len() - 1)
   }
 
-  // Validate all colliding entries in the given map to ensure that those
-  // messages do indeed collide when computing their compressed values.
-  fn validate(map: &HashMap<Vec<u8>,Vec<Vec<u8>>>) -> bool {
-    map.values().filter(|msgs| msgs.len() > 1).all(|msgs| {
-      let empty = [0u8, ..16];
-      // TODO rename "hash" variables
-      let mut first_hash: Option<[u8, ..16]> = None;
-      let hashes = msgs.iter().map(|msg| compress(&empty, msg[]));
-
-      hashes.all(|md2| { // TODO rename |md2|
-        first_hash.map_or_else(|| { first_hash = Some(md2); true }, |v| v == md2)
-      })
-    })
-  }
-
   #[test]
   fn test_k2() {
-    let state = create_initial_state(14);
+    let state = prefill_row(14);
 
     // There will be ~2^16 entries (minus collisions).
     let mut map = HashMap::with_capacity(256u * 256u);
 
-    // TODO rename variables
-    for (key, msg) in candidates(state[], 14) {
-      match map.entry(key) {
-        Vacant(entry) => { entry.set(vec!(msg)); },
-        Occupied(mut entry) => { entry.get_mut().push(msg); }
-      }
+    // Iterate and record all candidate pairs.
+    for (cmp, msg) in candidates(state[], 14) {
+      insert(&mut map, cmp, msg);
     }
 
     assert!(validate(&map));
@@ -204,7 +203,7 @@ mod test {
   fn test_k3() {
     let pool = TaskPool::new(8u);
     let (tx, rx) = channel();
-    let state = create_initial_state(13);
+    let state = prefill_row(13);
 
     for byte in range(0u, 256u) {
       let txc = tx.clone();
@@ -215,8 +214,8 @@ mod test {
         state[18] = byte as u8;
         state[34] = byte as u8;
 
-        for (key, msg) in candidates(state[], 13) {
-          txc.send((key, msg));
+        for candidate in candidates(state[], 13) {
+          txc.send(candidate);
         }
       });
     }
@@ -226,20 +225,8 @@ mod test {
     let mut map = HashMap::with_capacity(total);
 
     // Merge partial results.
-    let mut c = 0u;
-    let mut last_percent = 0;
     for (key, msg) in rx.iter().take(total) {
-      match map.entry(key) {
-        Vacant(entry) => { entry.set(vec!(msg)); },
-        Occupied(mut entry) => { entry.get_mut().push(msg); }
-      }
-
-      let percent = c / (total / 100);
-      if last_percent != percent {
-        last_percent = percent;
-        println!("count = {} / {} ({}%)", c, total, percent);
-      }
-      c += 1;
+      insert(&mut map, key, msg);
     }
 
     assert!(validate(&map));
