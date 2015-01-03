@@ -7,7 +7,7 @@
 extern crate "rust-md2" as md2;
 
 use md2::{SBOX, SBOXI};
-use std::iter::range_inclusive;
+use std::iter::{range_inclusive, repeat};
 use std::slice::bytes::{copy_memory, MutableByteVector};
 
 struct ByteRange {
@@ -17,7 +17,7 @@ struct ByteRange {
 
 impl ByteRange {
   fn new(num_bytes: uint) -> ByteRange {
-    ByteRange { current: Vec::from_elem(num_bytes, 0u8), done: false }
+    ByteRange { current: repeat(0u8).take(num_bytes).collect(), done: false }
   }
 }
 
@@ -34,7 +34,7 @@ impl Iterator<Vec<u8>> for ByteRange {
       self.current[i] += 1;
 
       // Zero all bytes right of the current index.
-      self.current[mut i+1..].set_memory(0);
+      self.current.slice_from_mut(i+1).set_memory(0);
 
       return Some(bytes);
     }
@@ -61,8 +61,8 @@ impl Iterator<(Vec<u8>, Vec<u8>)> for Candidates {
 
     // Set bytes for current candidate.
     let bytes = next.unwrap();
-    copy_memory(self.state[mut 16..18], bytes[]);
-    copy_memory(self.state[mut 32..34], bytes[]);
+    copy_memory(self.state.slice_mut(16, 18), bytes[]);
+    copy_memory(self.state.slice_mut(32, 34), bytes[]);
 
     // Compute the final compression value.
     let cmp = compress(self.state[], self.row);
@@ -80,7 +80,7 @@ pub fn candidates(state: &[u8], row: uint) -> Candidates {
 }
 
 pub fn prefill_row(num_rows: uint) -> Vec<u8> {
-  let mut state = [[0u8, ..49], ..19];
+  let mut state = [[0u8; 49]; 19];
 
   for row in range_inclusive(1, num_rows) {
     // Fill row of T1.
@@ -151,6 +151,7 @@ mod test {
   use std::collections::HashMap;
   use std::collections::hash_map::Entry::{Occupied, Vacant};
   use std::sync::TaskPool;
+  use std::sync::mpsc::channel;
 
   // Insert the given candidate pair, consisting of the compressed and the
   // original message, into the given hash map.
@@ -164,7 +165,7 @@ mod test {
   // Validate all colliding entries in the given map to ensure that those
   // messages do indeed collide when computing their compressed values.
   fn validate(map: &HashMap<Vec<u8>,Vec<Vec<u8>>>) -> bool {
-    let empty = [0u8, ..16];
+    let empty = [0u8; 16];
 
     // Ignore compressed values with only a single message (no collisions).
     let collisions = map.iter().filter(|&(_, msgs)| msgs.len() > 1);
@@ -212,7 +213,9 @@ mod test {
         state[34] = byte as u8;
 
         for candidate in candidates(state[], 13) {
-          txc.send(candidate);
+          if txc.send(candidate).is_err() {
+            panic!("sending failed");
+          }
         }
       });
     }
