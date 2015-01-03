@@ -12,27 +12,23 @@ use std::slice::bytes::{copy_memory, MutableByteVector};
 
 struct ByteRange {
   current: Vec<u8>,
-  first: bool
+  done: bool
 }
 
 impl ByteRange {
   fn new(num_bytes: uint) -> ByteRange {
-    ByteRange { current: Vec::from_elem(num_bytes, 0u8), first: true }
+    ByteRange { current: Vec::from_elem(num_bytes, 0u8), done: false }
   }
 }
 
 impl Iterator<Vec<u8>> for ByteRange {
   fn next(&mut self) -> Option<Vec<u8>> {
-    // TODO make nicer
-    if self.first {
-      self.first = false;
-      return Some(self.current.clone());
-    }
-
     for i in range(0, self.current.len()).rev() {
       if self.current[i] == 255 {
         continue;
       }
+
+      let bytes = self.current.clone();
 
       // Increase.
       self.current[i] += 1;
@@ -40,10 +36,11 @@ impl Iterator<Vec<u8>> for ByteRange {
       // Zero all bytes right of the current index.
       self.current[mut i+1..].set_memory(0);
 
-      return Some(self.current.clone());
+      return Some(bytes);
     }
 
-    None
+    // Need to special case where all bytes = 255.
+    if self.done { None } else { self.done = true; Some(self.current.clone()) }
   }
 }
 
