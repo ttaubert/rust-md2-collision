@@ -96,17 +96,18 @@ pub fn prefill_row(num_rows: uint) -> Vec<u8> {
     state[row + 1][0] = state[row][48] + (row as u8) - 1;
   }
 
-  // Compute triangles.
+  // Compute triangles in T2 and T3.
   for col in range(0, num_rows) {
     for row in range_inclusive(2 + col, num_rows).rev() {
-      // TODO make nicer
-      let byte = SBOXI[(state[row][32 - col] ^ state[row - 1][32 - col]) as uint];
-      state[row][32 - col - 1] = byte;
-      state[row][48 - col - 1] = byte;
+      let xor = state[row][32 - col] ^ state[row - 1][32 - col];
+
+      // We need the inverse S-box to compute triangles.
+      state[row][32 - col - 1] = SBOXI[xor as uint];
+      state[row][48 - col - 1] = SBOXI[xor as uint];
     }
   }
 
-  // TODO explain
+  // Return the desired row and throw away the first byte (t-values).
   state[num_rows][1..].to_vec()
 }
 
@@ -114,7 +115,8 @@ fn compress(state: &[u8], iteration: uint) -> Vec<u8> {
   let mut t = state[47] + iteration as u8 - 1;
   let mut x = state.to_vec();
 
-  // TODO explain
+  // Compute the MD2 compression function from the current state until we
+  // have the final compression state that would be fed into the next round.
   for row in range(iteration, 18) {
     for byte in x.iter_mut() {
       *byte ^= SBOX[t as uint];
@@ -129,7 +131,9 @@ fn compress(state: &[u8], iteration: uint) -> Vec<u8> {
 fn decompress(state: &[u8], iteration: uint) -> Vec<u8> {
   let mut x = state.to_vec();
 
-  // TODO explain
+  // Compute the MD2 compression function from the current state backwards
+  // until we arrive at the original message that needs to be passed into it
+  // to result in the current state.
   for row in range(0, iteration).rev() {
     for col in range(1, 48).rev() {
       x[col] ^= SBOX[x[col - 1] as uint];
@@ -208,7 +212,7 @@ mod test {
       let mut state = state.clone();
 
       pool.execute(move || {
-        // TODO explain
+        // Set the third bytes of T2 and T3.
         state[18] = byte as u8;
         state[34] = byte as u8;
 
