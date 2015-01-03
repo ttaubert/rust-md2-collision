@@ -7,88 +7,90 @@
 extern crate "rust-md2" as md2;
 
 use md2::{SBOX, SBOXI};
-use std::collections::HashMap;
-use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::iter::range_inclusive;
 use std::slice::bytes::{copy_memory, MutableByteVector};
 
 struct ByteRange {
-  v: Vec<u8>
+  current: Vec<u8>,
+  first: bool
 }
 
 impl ByteRange {
-  fn new(n: uint) -> ByteRange {
-    ByteRange { v: Vec::from_elem(n, 0u8) }
+  fn new(num_bytes: uint) -> ByteRange {
+    ByteRange { current: Vec::from_elem(num_bytes, 0u8), first: true }
   }
 }
 
 impl Iterator<Vec<u8>> for ByteRange {
   fn next(&mut self) -> Option<Vec<u8>> {
-    for i in range(0, self.v.len()).rev() {
-      if self.v[i] == 255 {
+    // TODO make nicer
+    if self.first {
+      self.first = false;
+      return Some(self.current.clone());
+    }
+
+    for i in range(0, self.current.len()).rev() {
+      if self.current[i] == 255 {
         continue;
       }
 
       // Increase.
-      self.v[i] += 1;
+      self.current[i] += 1;
 
       // Zero all bytes right of the current index.
-      self.v[mut i+1..].set_memory(0);
+      self.current[mut i+1..].set_memory(0);
 
-      return Some(self.v.clone());
+      return Some(self.current.clone());
     }
 
     None
   }
 }
 
-pub struct Collisions {
-  map: HashMap<Vec<u8>,Vec<Vec<u8>>>
+pub struct Candidates {
+  range: ByteRange,
+  state: Vec<u8>,
+  row: uint
 }
 
-impl Collisions {
-  pub fn new() -> Collisions {
-    Collisions { map: HashMap::new() }
-  }
+impl Iterator<(Vec<u8>, Vec<u8>)> for Candidates {
+  fn next(&mut self) -> Option<(Vec<u8>, Vec<u8>)> {
+    let next = self.range.next();
 
-  pub fn add(&mut self, key: Vec<u8>, msg: Vec<u8>) {
-    match self.map.entry(key) {
-      Vacant(entry) => { entry.set(vec!(msg)); },
-      Occupied(mut entry) => { entry.get_mut().push(msg); }
+    // Bail out if we tried all possible combinations.
+    if next.is_none() {
+      return None;
     }
-  }
 
-  pub fn merge(&mut self, other: Collisions) {
-    for (key, msgs) in other.map.into_iter() {
-      match self.map.entry(key) {
-        Vacant(entry) => { entry.set(msgs); },
-        Occupied(mut entry) => { entry.get_mut().push_all(msgs[]); }
-      }
-    }
-  }
+    // Set bytes for current candidate.
+    let bytes = next.unwrap();
+    copy_memory(self.state[mut 16..18], bytes[]);
+    copy_memory(self.state[mut 32..34], bytes[]);
 
-  pub fn validate(&self) -> bool {
-    self.map.values().all(|msgs| {
-      let empty = [0u8, ..16];
-      let mut first_hash: Option<[u8, ..16]> = None;
-      let hashes = msgs.iter().map(|msg| md2::compress(&empty, msg[]));
+    // TODO rename variables
 
-      hashes.all(|md2| {
-        first_hash.map_or_else(|| { first_hash = Some(md2); true }, |v| v == md2)
-      })
-    })
-  }
+    // Compute the final compression value.
+    let key = compress(self.state[], self.row);
 
-  pub fn count(&self) -> uint {
-    self.map.values().fold(0u, |count, msgs| count + msgs.len() - 1)
+    // Compute the original message leading to this state.
+    let msg = decompress(self.state[], self.row);
+
+    Some((key, msg))
   }
 }
 
-pub fn create_initial_state(k: uint) -> [[u8, ..49], ..19] {
-  let rows = 16 - k;
+pub fn candidates(state: &[u8], row: uint) -> Candidates {
+  // Test 2^16 combinations.
+  let range = ByteRange::new(2);
+
+  Candidates { range: range, state: state.to_vec(), row: row }
+}
+
+// TODO rename function
+pub fn create_initial_state(num_rows: uint) -> Vec<u8> {
   let mut state = [[0u8, ..49], ..19];
 
-  for row in range_inclusive(1, rows) {
+  for row in range_inclusive(1, num_rows) {
     // Fill row of T1.
     for i in range(1, 17) {
       state[row][i] = SBOX[state[row][i - 1] as uint] ^ state[row - 1][i];
@@ -103,39 +105,24 @@ pub fn create_initial_state(k: uint) -> [[u8, ..49], ..19] {
   }
 
   // Compute triangles.
-  for col in range(0, rows) {
-    for row in range_inclusive(2 + col, rows).rev() {
-      state[row][32 - col - 1] = SBOXI[(state[row][32 - col] ^ state[row - 1][32 - col]) as uint];
-      state[row][48 - col - 1] = SBOXI[(state[row][48 - col] ^ state[row - 1][48 - col]) as uint];
+  for col in range(0, num_rows) {
+    for row in range_inclusive(2 + col, num_rows).rev() {
+      // TODO make nicer
+      let byte = SBOXI[(state[row][32 - col] ^ state[row - 1][32 - col]) as uint];
+      state[row][32 - col - 1] = byte;
+      state[row][48 - col - 1] = byte;
     }
   }
 
-  state
-}
-
-pub fn find_collisions(state: &[u8], k: uint) -> Collisions {
-  let rows = 16 - k;
-  assert_eq!(state.len(), 48);
-  let mut state = state.to_vec();
-  let mut collisions = Collisions::new();
-
-  let k = 2;
-  for bytes in ByteRange::new(k) {
-    copy_memory(state[mut 16..16+k], bytes[]);
-    copy_memory(state[mut 16+16..16+k+16], bytes[]);
-
-    let key = compress(state[], rows);
-    let msg = decompress(state[], rows);
-    collisions.add(key, msg);
-  }
-
-  collisions
+  // TODO explain
+  state[num_rows][1..].to_vec()
 }
 
 fn compress(state: &[u8], iteration: uint) -> Vec<u8> {
   let mut t = state[47] + iteration as u8 - 1;
   let mut x = state.to_vec();
 
+  // TODO explain
   for row in range(iteration, 18) {
     for byte in x.iter_mut() {
       *byte ^= SBOX[t as uint];
@@ -150,6 +137,7 @@ fn compress(state: &[u8], iteration: uint) -> Vec<u8> {
 fn decompress(state: &[u8], iteration: uint) -> Vec<u8> {
   let mut x = state.to_vec();
 
+  // TODO explain
   for row in range(0, iteration).rev() {
     for col in range(1, 48).rev() {
       x[col] ^= SBOX[x[col - 1] as uint];
@@ -164,45 +152,97 @@ fn decompress(state: &[u8], iteration: uint) -> Vec<u8> {
 
 #[cfg(test)]
 mod test {
-  use Collisions;
-  use find_collisions;
+  use candidates;
   use create_initial_state;
+
+  use md2::compress;
+  use std::collections::HashMap;
+  use std::collections::hash_map::Entry::{Occupied, Vacant};
   use std::sync::TaskPool;
+
+  // Count the number of map entries that have more than a single message.
+  // Those will compress to the same final value and thus represent collisions.
+  fn count(map: &HashMap<Vec<u8>,Vec<Vec<u8>>>) -> uint {
+    map.values().fold(0u, |count, msgs| count + msgs.len() - 1)
+  }
+
+  // Validate all colliding entries in the given map to ensure that those
+  // messages do indeed collide when computing their compressed values.
+  fn validate(map: &HashMap<Vec<u8>,Vec<Vec<u8>>>) -> bool {
+    map.values().filter(|msgs| msgs.len() > 1).all(|msgs| {
+      let empty = [0u8, ..16];
+      // TODO rename "hash" variables
+      let mut first_hash: Option<[u8, ..16]> = None;
+      let hashes = msgs.iter().map(|msg| compress(&empty, msg[]));
+
+      hashes.all(|md2| { // TODO rename |md2|
+        first_hash.map_or_else(|| { first_hash = Some(md2); true }, |v| v == md2)
+      })
+    })
+  }
 
   #[test]
   fn test_k2() {
-    let state = create_initial_state(2);
-    let collisions = find_collisions(state[14][1..], 2);
+    let state = create_initial_state(14);
 
-    assert!(collisions.validate());
-    assert_eq!(collisions.count(), 141);
+    // There will be ~2^16 entries (minus collisions).
+    let mut map = HashMap::with_capacity(256u * 256u);
+
+    // TODO rename variables
+    for (key, msg) in candidates(state[], 14) {
+      match map.entry(key) {
+        Vacant(entry) => { entry.set(vec!(msg)); },
+        Occupied(mut entry) => { entry.get_mut().push(msg); }
+      }
+    }
+
+    assert!(validate(&map));
+    assert_eq!(count(&map), 141);
   }
 
   #[test]
   fn test_k3() {
     let pool = TaskPool::new(8u);
     let (tx, rx) = channel();
-    let state = create_initial_state(3);
+    let state = create_initial_state(13);
 
     for byte in range(0u, 256u) {
       let txc = tx.clone();
-      let mut sc = state.clone();
+      let mut state = state.clone();
 
       pool.execute(move || {
-        sc[13][19] = byte as u8;
-        sc[13][35] = byte as u8;
+        // TODO explain
+        state[18] = byte as u8;
+        state[34] = byte as u8;
 
-        txc.send(find_collisions(sc[13][1..], 3));
+        for (key, msg) in candidates(state[], 13) {
+          txc.send((key, msg));
+        }
       });
     }
 
+    // There will be ~2^24 entries (minus collisions).
+    let total = 256u * 256u * 256u;
+    let mut map = HashMap::with_capacity(total);
+
     // Merge partial results.
-    let mut collisions = Collisions::new();
-    for partial in rx.iter().take(256u) {
-      collisions.merge(partial);
+    let mut c = 0u;
+    let mut last_percent = 0;
+    for (key, msg) in rx.iter().take(total) {
+      match map.entry(key) {
+        Vacant(entry) => { entry.set(vec!(msg)); },
+        Occupied(mut entry) => { entry.get_mut().push(msg); }
+      }
+
+      let percent = c / (total / 100);
+      if last_percent != percent {
+        last_percent = percent;
+        println!("count = {} / {} ({}%)", c, total, percent);
+      }
+      c += 1;
     }
 
-    assert!(collisions.validate());
-    assert_eq!(collisions.count(), 32784);
+    assert!(validate(&map));
+    assert_eq!(count(&map), 32784);
   }
 }
